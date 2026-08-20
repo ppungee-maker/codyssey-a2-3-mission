@@ -1,4 +1,7 @@
-# reviewlens — AI 기반 고객 리뷰 감정 분석 대시보드 (A2-3)
+# A2-3 「AI 기반 고객 리뷰 감정 분석 대시보드」 — reviewlens
+
+> 코디세이 `AI 활용 학습 (AI Native Advanced)` 과정 [Project C] 미션 답안입니다.
+> 미션 원문은 [`problem.md`](problem.md).
 
 리뷰 CSV 를 넣으면 **적재 → 정제 → 감정 분석 → 인사이트 추출 → 차트·리포트·HTML 대시보드**
 까지 만들어 주는 CLI 도구입니다. 데이터는 SQLite 에 남고, 단계마다 따로 실행할 수 있습니다.
@@ -12,7 +15,7 @@
 | 외부 의존 | `requests` · `matplotlib` |
 | 환경 변수 | `GEMINI_API_KEY` — [AI Studio](https://aistudio.google.com/apikey) 무료 등급으로 발급 |
 | 샘플 데이터 | `data/sample_reviews.csv` — 70건 · 제품 3종 · 한/영 혼합 |
-| 결과물 미리보기 | **[대시보드 샘플](https://dicia-jhoh.github.io/codyssey-a2-3/)** (GitHub Pages) · [스크린샷](images/dashboard-preview.png) |
+| 결과물 미리보기 | [스크린샷](images/dashboard-preview.png) · 원본 `docs/index.html` |
 
 ---
 
@@ -165,7 +168,7 @@ codyssey-a2-3/
 │   └── export.py      CSV · JSONL
 ├── config.json        임계값 · 색 · 중복 정책 · 경로
 ├── data/sample_reviews.csv   샘플 리뷰 70건
-├── docs/index.html    대시보드 결과물 샘플(GitHub Pages 로 공개)
+├── docs/index.html    대시보드 결과물 샘플(실행 결과 커밋본)
 └── images/            문서용 차트 샘플
 ```
 
@@ -781,18 +784,16 @@ python -m reviewlens dashboard
 
 `output/` 은 `.gitignore` 에 있어 저장소에 올라가지 않습니다 — 생성물이라 코드에서 언제든
 다시 만들 수 있기 때문입니다. 대신 **결과가 어떻게 생겼는지 보라고 샘플 한 장**을
-`docs/index.html` 에 넣고 GitHub Pages 로 띄워 두었습니다.
+[`docs/index.html`](docs/index.html) 에 커밋해 두었습니다.
 
-### 👉 [바로 보기 — dicia-jhoh.github.io/codyssey-a2-3](https://dicia-jhoh.github.io/codyssey-a2-3/)
+![대시보드 미리보기](images/dashboard-preview.png)
 
-[![대시보드 미리보기](images/dashboard-preview.png)](https://dicia-jhoh.github.io/codyssey-a2-3/)
-
-저장소에서 HTML 파일을 그냥 열면 GitHub 이 렌더하지 않고 소스를 보여 줍니다. Pages 로 띄운
-이유가 그것입니다 — 클릭 한 번으로 실제 화면이 뜹니다.
+GitHub 은 저장소 안의 HTML 을 렌더하지 않고 소스로 보여 줍니다. 실제 화면으로 보려면
+둘 중 하나입니다.
 
 | 방법 | 어떻게 |
 |---|---|
-| 샘플을 본다 | 위 링크를 엽니다 |
+| 샘플을 본다 | `docs/index.html` 을 Raw 로 내려받아 브라우저로 엽니다 |
 | 직접 만든다 | 아래 3줄을 돌리면 같은 것이 `output/` 에 생깁니다 |
 
 ```bash
@@ -1030,6 +1031,28 @@ OpenAI 로 되돌리려면 세 곳만 바꿉니다.
 ```python
 FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$")
 ```
+
+---
+
+## 요구 사항 충족 매핑 (`problem.md` §4)
+
+| # | 요구 사항 | 구현 위치 |
+|---|---|---|
+| 1 | argparse 서브커맨드 (9종 필수) | `reviewlens/cli.py` — **10종**(`add` 추가) |
+| 2 | CSV 수집, raw 저장소 | `reviewlens/ingest.py` · `storage.py` |
+| 3 | 정제 5종 + 중복 skip/upsert, clean 저장소 분리 | `reviewlens/clean.py` · `storage.py` |
+| 4 | 감정 3분류 + 신뢰도, 대상 옵션, 실패 스킵 | `reviewlens/ai.py::run_analyze` |
+| 5 | 키워드·요약 추출(조건별), 별도 저장 | `reviewlens/ai.py::run_extract` |
+| 6 | 조회 — list(필터·정렬·페이지) / show / stats | `reviewlens/cli.py` · `stats.py` |
+| 7 | matplotlib 차트 3종 + 한글 폰트 | `reviewlens/charts.py` |
+| 8 | 리포트(품질 지표·TOP N·AI 결과) 콘솔+파일 | `reviewlens/stats.py` |
+| 9 | 내보내기 2포맷 이상 | `reviewlens/export.py` — CSV · JSONL |
+| 10 | `config.json` + `logging` INFO/WARNING/ERROR | `reviewlens/config.py` · 각 모듈 logger |
+| 11 | 영구 저장소(SQLite) — 메모리 금지 | `reviewlens/storage.py` |
+| 12 | 모듈 4개 이상 분리 | `reviewlens/` **12개** |
+| 13 | 샘플 리뷰 30건 이상 | `data/sample_reviews.csv` **70건**(한 62 + 영 8) |
+
+보너스 4종은 [보너스 (수행)](#보너스-수행) 절에 따로 적었습니다.
 
 ---
 
