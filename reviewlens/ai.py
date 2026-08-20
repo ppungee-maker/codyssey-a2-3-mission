@@ -15,6 +15,8 @@ import json
 import logging
 import re
 
+import time
+
 import requests
 
 from . import storage
@@ -146,7 +148,13 @@ def run_analyze(db_path: str, api_key: str, config: dict, *, target: str = "unan
             rows = storage.select_clean(conn, status="unanalyzed", limit=limit)
 
         stats["target"] = len(rows)
-        for row in rows:
+        delay = config.get("ai", {}).get("delay", 4.2)
+        for i, row in enumerate(rows):
+            # 첫 번째 요청이 아닐 때만 딜레이를 주어 API 속도 제한(RPM)을 피한다
+            if i > 0 and delay > 0:
+                logger.info("대기 중... (Rate Limit 회피를 위해 %.1f초 대기)", delay)
+                time.sleep(delay)
+
             result = analyze_one(api_key, row, config)
             if result is None:
                 stats["failed"] += 1
