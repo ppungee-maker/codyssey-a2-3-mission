@@ -60,6 +60,7 @@ python -m reviewlens extract --sentiment 부정                # 4) 인사이트
 python -m reviewlens stats                                   # 5) 통계 + 알림
 python -m reviewlens dashboard                               # 6) 차트 + 리포트 + HTML
 python -m reviewlens export --format both                    # 7) CSV + JSONL
+python -m reviewlens export --format all                     # 8) CSV + JSONL + Excel
 ```
 
 ### 키 없이 확인하기
