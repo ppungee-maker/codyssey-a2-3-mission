@@ -38,21 +38,50 @@ TEXT_CAP = 1000
 
 
 def call_llm(api_key: str, prompt: str, config: dict) -> str:
-    """Chat Completions 호출 → 응답 텍스트. 실패는 예외로 올린다."""
-    response = requests.post(
-        LLM_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": config["ai"]["model"],
-            "messages": [{"role": "user", "content": prompt}],
-            # 감정 판정은 사실 판단이다 — 같은 리뷰를 두 번 분석했는데 결과가 갈리면
-            # 둘 중 하나가 틀린 것이다. 창작(A2-1 네이밍 0.8)과 반대 방향으로 낮춘다.
-            "temperature": 0.1,
-        },
-        timeout=config["ai"]["timeout"],
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    """Chat Completions 호출 → 응답 텍스트. 실패는 예외로 올린다.
+
+    429(Rate Limit) 및 503(Service Unavailable) 발생 시 최대 3회 재시도한다.
+    """
+    max_retries = 3
+    retry_delay = 5.0
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.post(
+                LLM_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": config["ai"]["model"],
+                    "messages": [{"role": "user", "content": prompt}],
+                    # 감정 판정은 사실 판단이다 — 같은 리뷰를 두 번 분석했는데 결과가 갈리면
+                    # 둘 중 하나가 틀린 것이다. 창작(A2-1 네이밍 0.8)과 반대 방향으로 낮춘다.
+                    "temperature": 0.1,
+                },
+                timeout=config["ai"]["timeout"],
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except requests.HTTPError as exc:
+            code = exc.response.status_code if exc.response is not None else 0
+            if code in (429, 503) and attempt < max_retries:
+                sleep_time = retry_delay * attempt
+                logger.warning(
+                    "API 호출 실패 (HTTP %s). %d회차 재시도 전 %.1f초 대기합니다...",
+                    code, attempt, sleep_time
+                )
+                time.sleep(sleep_time)
+                continue
+            raise exc
+        except (requests.Timeout, requests.RequestException) as exc:
+            if attempt < max_retries:
+                sleep_time = retry_delay * attempt
+                logger.warning(
+                    "네트워크 오류/타임아웃. %d회차 재시도 전 %.1f초 대기합니다...",
+                    attempt, sleep_time
+                )
+                time.sleep(sleep_time)
+                continue
+            raise exc
 
 
 def parse_json(text: str):
