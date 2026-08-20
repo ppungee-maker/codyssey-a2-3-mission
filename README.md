@@ -12,10 +12,11 @@
 | 서브커맨드 | `import` `add` `clean` `analyze` `extract` `list` `show` `stats` `dashboard` `export` |
 | 저장소 | SQLite — `raw_reviews` · `clean_reviews` · `extractions` |
 | 차트 | 감정 분포 · 시간별 추이 · 별점별 감정 분포 (matplotlib) |
-| 외부 의존 | `requests` · `matplotlib` |
+| 외부 의존 | `requests` · `matplotlib` · `openpyxl` |
 | 환경 변수 | `GEMINI_API_KEY` — [AI Studio](https://aistudio.google.com/apikey) 무료 등급으로 발급 |
-| 샘플 데이터 | `data/sample_reviews.csv` — 70건 · 제품 3종 · 한/영 혼합 |
-| 결과물 미리보기 | [스크린샷](images/dashboard-preview.png) · 원본 `docs/index.html` |
+| 기본 모델 | `gemini-3.5-flash-lite` (가장 저렴하고 빠른 최신 플래시 라이트 모델) |
+| 샘플 데이터 | `data/sample_reviews.csv` · `data/sample_reviews.xlsx` — 70건 · 제품 3종 · 한/영 혼합 |
+| 결과물 미리보기 | [스크린샷](images/dashboard-preview.png) · 원본 `docs/index.html` · [운영 매뉴얼](docs/manual.md) |
 
 ---
 
@@ -80,16 +81,16 @@ python -m reviewlens export --format csv
 
 | 명령 | 하는 일 | 주요 옵션 |
 |---|---|---|
-| `import` | CSV 적재 → `raw_reviews` | `--file` |
+| `import` | CSV / Excel(.xlsx) 적재 → `raw_reviews` | `--file` |
 | `add` | 리뷰 1건 직접 입력 | `--text` · `--id` · `--product` · `--rating` · `--date` |
 | `clean` | 정제 규칙 5종 + 중복 처리 | `--policy {skip,upsert}` · `--all` |
-| `analyze` | 감정 + 신뢰도 | `--all` · `--unanalyzed` · `--id` · `--limit` |
+| `analyze` | 감정 + 신뢰도 (Rate Limit 딜레이/재시도 내장) | `--all` · `--unanalyzed` · `--id` · `--limit` |
 | `extract` | 키워드·요약·개선 제안 | `--sentiment` · `--product` · `--date-from/to` |
 | `list` | 목록 조회 | `--sentiment` · `--rating` · `--rating-min` · `--product` · `--date-from/to` · `--status` · `--sort` · `--asc` · `--page` · `--size` |
 | `show` | 상세 조회 | `review_id` |
 | `stats` | 통계 요약 + 감정 변화 알림 | `--as-of` |
 | `dashboard` | 차트 3종 + 리포트 + HTML | `--format {md,txt}` · `--no-charts` · `--no-html` · `--as-of` |
-| `export` | CSV / JSONL | `--format {csv,jsonl,both}` · `--sentiment` · `--rating-min` · `--product` |
+| `export` | CSV / JSONL / Excel(.xlsx) | `--format {csv,jsonl,excel,both,all}` · `--sentiment` · `--rating-min` · `--product` |
 
 **단계를 나눈 이유**는 비용과 실패 성격이 다르기 때문입니다. 적재는 파일 I/O, 정제는 계산,
 분석은 **돈**이 듭니다. 한 명령으로 묶으면 분석이 실패했을 때 적재부터 다시 해야 합니다.
@@ -112,8 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--verbose", action="store_true", help="DEBUG 로그까지 출력")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_import = sub.add_parser("import", help="CSV 리뷰 파일 적재")
-    p_import.add_argument("--file", required=True, help="CSV 경로")
+    p_import = sub.add_parser("import", help="CSV / Excel 리뷰 파일 적재")
+    p_import.add_argument("--file", required=True, help="CSV 또는 Excel(.xlsx) 경로")
     p_import.set_defaults(func=_cmd_import)
 ```
 
@@ -159,17 +160,21 @@ codyssey-a2-3/
 │   ├── cli.py         서브커맨드 10개 · 로깅 설정
 │   ├── config.py      config.json + 환경변수
 │   ├── storage.py     SQLite — 스키마·CRUD·집계·조회 필터
-│   ├── ingest.py      CSV 적재 · 수동 입력
+│   ├── ingest.py      CSV / Excel 적재 · 수동 입력
 │   ├── clean.py       정제 규칙 5종 · 언어 판정
-│   ├── ai.py          감정 분석 · 인사이트 추출
+│   ├── ai.py          감정 분석 · 인사이트 추출 (Rate Limit 딜레이 및 재시도)
 │   ├── charts.py      matplotlib 차트 3종
 │   ├── stats.py       품질 지표 · TOP N · 리포트 조립
 │   ├── alert.py       감정 급증 알림(보너스)
 │   ├── dashboard.py   단일 HTML 대시보드(보너스)
-│   └── export.py      CSV · JSONL
-├── config.json        임계값 · 색 · 중복 정책 · 경로
-├── data/sample_reviews.csv   샘플 리뷰 70건
-├── docs/index.html    대시보드 결과물 샘플(실행 결과 커밋본)
+│   └── export.py      CSV · JSONL · Excel
+├── config.json        임계값 · 색 · 중복 정책 · 경로 · AI 모델
+├── data/
+│   ├── sample_reviews.csv     샘플 리뷰 CSV (70건)
+│   └── sample_reviews.xlsx    샘플 리뷰 Excel (70건)
+├── docs/
+│   ├── index.html     대시보드 결과물 샘플(실행 결과 커밋본)
+│   └── manual.md      실행 및 운영 상세 매뉴얼
 └── images/            문서용 차트 샘플
 ```
 
@@ -424,22 +429,40 @@ def build_sentiment_prompt(text: str, language: str) -> str:
 
 ```python
 def call_llm(api_key: str, prompt: str, config: dict) -> str:
-    """Chat Completions 호출 → 응답 텍스트. 실패는 예외로 올린다."""
-    response = requests.post(
-        LLM_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": config["ai"]["model"],
-            "messages": [{"role": "user", "content": prompt}],
-            # 감정 판정은 사실 판단이다 — 같은 리뷰를 두 번 분석했는데 결과가 갈리면
-            # 둘 중 하나가 틀린 것이다. 창작(A2-1 네이밍 0.8)과 반대 방향으로 낮춘다.
-            "temperature": 0.1,
-        },
-        timeout=config["ai"]["timeout"],
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    """Chat Completions 호출 → 응답 텍스트. 실패는 예외로 올린다.
+
+    429(Rate Limit) 및 503(Service Unavailable) 발생 시 최대 3회 재시도한다.
+    """
+    max_retries = 3
+    retry_delay = 5.0
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.post(
+                LLM_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": config["ai"]["model"],
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                },
+                timeout=config["ai"]["timeout"],
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except requests.HTTPError as exc:
+            code = exc.response.status_code if exc.response is not None else 0
+            if code in (429, 503) and attempt < max_retries:
+                if code == 429:
+                    sleep_time = 65.0  # 1분 윈도우 리셋을 위해 65초 대기
+                else:
+                    sleep_time = retry_delay * attempt
+                time.sleep(sleep_time)
+                continue
+            raise exc
 ```
+
+호출 간 `4.2초` 지연(RPM 15회 준수)과 HTTP 429/503 시 자동 백오프 재시도가 적용되어 대량 분석 시에도 중단 없이 안정적으로 처리됩니다.
 
 값을 검증한 뒤에만 저장합니다.
 
@@ -854,27 +877,25 @@ GROUP BY product ORDER BY total DESC
 
 ---
 
-## 내보내기 — CSV vs JSONL
+## 내보내기 — CSV vs JSONL vs Excel
 
-| | CSV | JSONL |
-|---|---|---|
-| 소비자 | 사람 · 엑셀 | 프로그램 |
-| 줄바꿈이 든 값 | 약하다(엑셀에서 행이 밀린다) | 강하다 |
-
-```python
-            # 표 한 칸에 줄바꿈이 들어가면 엑셀에서 행이 밀려 보인다 — 공백으로 편다.
-            if item.get("text"):
-                item["text"] = str(item["text"]).replace("\n", " ")
-```
-
-인코딩도 포맷마다 다르게 정합니다.
+| | CSV | JSONL | Excel (.xlsx) |
+|---|---|---|---|
+| 소비자 | 사람 · 엑셀 | 프로그램 / 스트리밍 | 보고서 · 비즈니스 공유 |
+| 줄바꿈이 든 값 | 약하다 (공백으로 정규화) | 강하다 (원문 유지) | 완벽 지원 |
+| 스타일 | 텍스트만 | 텍스트만 | 헤더 배경색·굵은폰트·열너비 자동조정 |
 
 ```python
-    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+# Excel(.xlsx) 내보내기 (openpyxl 활용)
+def export_excel(rows, out_dir: str) -> str:
+    ...
 ```
 
-`utf-8-sig`(BOM 포함)를 쓰는 이유: 엑셀(Windows)이 BOM 없는 UTF-8 CSV 를 열면 한글이
-깨집니다. **읽을 때와 쓸 때 같은 이유로 BOM 을 다룹니다.**
+인코딩 및 포맷도 상황에 맞게 지원합니다.
+* `--format csv`: UTF-8 BOM (`utf-8-sig`) 적용으로 엑셀 한글 깨짐 방지
+* `--format jsonl`: 줄 단위 JSON 포맷
+* `--format excel`: 스타일링이 적용된 `.xlsx` 파일 단독 생성
+* `--format all`: CSV, JSONL, Excel 3종 파일 동시 생성
 
 ---
 
@@ -990,11 +1011,9 @@ python -m reviewlens analyze --limit 15   # 1분 기다렸다 다시
 ```
 
 모델은 `config.json` 의 `ai.model` 에서 고릅니다.
-
-| 값 | 성격 |
-|---|---|
-| `gemini-flash-latest` (기본) | 최신 flash 로 자동 이동하는 별칭. 모델 ID 가 낡아 죽지 않습니다 |
-| `gemini-3.7-flash` 등 고정 ID | 결과 재현이 필요할 때. 같은 코드가 언제 돌아도 같은 모델을 씁니다 |
+* **`gemini-3.5-flash-lite` (기본)**: 가장 저렴하고 빠른 최신 플래시 라이트 모델입니다. 비용을 절감하면서 대량 분석에 최적화되어 있습니다.
+* **`gemini-flash-latest`**: 최신 flash 로 자동 이동하는 별칭입니다.
+* **`gemini-3.7-flash` 등 고정 ID**: 고도화된 추론 또는 결과 재현이 필요할 때 사용합니다.
 
 ### 다른 제공자로 바꾸기 — OpenAI 호환 endpoint
 
