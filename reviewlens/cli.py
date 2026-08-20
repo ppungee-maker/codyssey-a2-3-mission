@@ -63,8 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--verbose", action="store_true", help="DEBUG 로그까지 출력")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_import = sub.add_parser("import", help="CSV 리뷰 파일 적재")
-    p_import.add_argument("--file", required=True, help="CSV 경로")
+    p_import = sub.add_parser("import", help="CSV / Excel 리뷰 파일 적재")
+    p_import.add_argument("--file", required=True, help="CSV 또는 Excel(.xlsx) 경로")
     p_import.set_defaults(func=_cmd_import)
 
     p_add = sub.add_parser("add", help="리뷰 1건 직접 입력")
@@ -125,8 +125,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--as-of", dest="as_of", help="알림 기준일 YYYY-MM-DD(기본: 최신 리뷰일)")
     p_dash.set_defaults(func=_cmd_dashboard)
 
-    p_exp = sub.add_parser("export", help="CSV / JSONL 내보내기")
-    p_exp.add_argument("--format", choices=["csv", "jsonl", "both"], default="csv")
+    p_exp = sub.add_parser("export", help="CSV / JSONL / Excel 내보내기")
+    p_exp.add_argument(
+        "--format",
+        choices=["csv", "jsonl", "excel", "both", "all"],
+        default="csv",
+        help="내보내기 포맷 (csv, jsonl, excel, both=csv+jsonl, all=전체)",
+    )
     p_exp.add_argument("--sentiment", choices=["긍정", "중립", "부정"])
     p_exp.add_argument("--rating-min", dest="rating_min", type=int)
     p_exp.add_argument("--product")
@@ -137,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _cmd_import(args, cfg: dict) -> int:
     try:
-        records = ingest.read_csv(args.file)
+        records = ingest.read_file(args.file)
     except ValueError as exc:
         print(f"[중단] {exc}", file=sys.stderr)
         return 1

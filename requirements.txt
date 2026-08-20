@@ -3,3 +3,6 @@ requests>=2.31
 
 # 차트 3종. 한글 폰트 처리는 A2-1 에서 확립한 방식을 그대로 씁니다.
 matplotlib>=3.8
+
+# Excel 파일 읽기 (.xlsx)
+openpyxl>=3.1.0
