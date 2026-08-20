@@ -64,11 +64,19 @@ def call_llm(api_key: str, prompt: str, config: dict) -> str:
         except requests.HTTPError as exc:
             code = exc.response.status_code if exc.response is not None else 0
             if code in (429, 503) and attempt < max_retries:
-                sleep_time = retry_delay * attempt
-                logger.warning(
-                    "API 호출 실패 (HTTP %s). %d회차 재시도 전 %.1f초 대기합니다...",
-                    code, attempt, sleep_time
-                )
+                if code == 429:
+                    # Gemini 무료 티어의 1분 차단을 확실히 리셋하기 위해 65초 대기
+                    sleep_time = 65.0
+                    logger.warning(
+                        "API 쿼터 초과(HTTP 429) 감지. 윈도우 리셋을 위해 %.1f초 동안 완전히 대기 후 %d회차 재시도합니다...",
+                        sleep_time, attempt
+                    )
+                else:
+                    sleep_time = retry_delay * attempt
+                    logger.warning(
+                        "API 호출 실패 (HTTP %s). %d회차 재시도 전 %.1f초 대기합니다...",
+                        code, attempt, sleep_time
+                    )
                 time.sleep(sleep_time)
                 continue
             raise exc
