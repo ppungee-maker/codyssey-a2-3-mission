@@ -3,6 +3,11 @@
 > 코디세이 `AI 활용 학습 (AI Native Advanced)` 과정 [Project C] 미션 답안입니다.
 > 미션 원문은 [`problem.md`](problem.md).
 
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![CLI](https://img.shields.io/badge/interface-CLI-4B5563)
+![Storage](https://img.shields.io/badge/storage-SQLite-003B57?logo=sqlite&logoColor=white)
+![AI](https://img.shields.io/badge/AI-Gemini%20%7C%20OpenAI-8E75B2)
+
 리뷰 CSV 를 넣으면 **적재 → 정제 → 감정 분석 → 인사이트 추출 → 차트·리포트·HTML 대시보드**
 까지 만들어 주는 CLI 도구입니다. 데이터는 SQLite 에 남고, 단계마다 따로 실행할 수 있습니다.
 
@@ -16,6 +21,32 @@
 | 환경 변수 | `GEMINI_API_KEY` — [AI Studio](https://aistudio.google.com/apikey) 무료 등급으로 발급 |
 | 샘플 데이터 | `data/sample_reviews.csv` — 70건 · 제품 3종 · 한/영 혼합 |
 | 결과물 미리보기 | [스크린샷](images/dashboard-preview.png) · 원본 `docs/index.html` |
+
+---
+
+## ⚡ 3분 검증 가이드
+
+API 키 없이도 데이터 적재·정제·조회·내보내기까지 검증할 수 있습니다. 처음 보는 검토자는 아래 순서대로 실행하면 됩니다.
+
+```bash
+python -m reviewlens import --file data/sample_reviews.csv
+python -m reviewlens clean
+python -m reviewlens stats
+python -m reviewlens list --rating-min 4 --page 1 --size 5
+python -m reviewlens export --format both
+```
+
+정상 실행 시 SQLite 저장소에 **raw/clean 데이터가 분리**되고, 콘솔에는 건수·감정별 비율·품질 지표가 표시됩니다. 내보낸 CSV/JSONL은 설정의 `output` 디렉터리에 생성됩니다.
+
+| 검증하려는 것 | 확인 명령 | 기대 결과 |
+| --- | --- | --- |
+| 입력 적재 | `import` | 샘플 리뷰 70건이 raw 저장소에 기록 |
+| 데이터 품질 | `clean` | 필수 필드·별점·날짜·짧은 텍스트·중복 규칙 적용 |
+| 조회 UX | `list --rating-min 4` | 필터·정렬·페이지네이션 결과 출력 |
+| 영구 저장 | `stats`를 재실행 | 이전 실행 데이터가 SQLite에서 다시 집계 |
+| 산출물 | `export --format both` | CSV와 JSONL 파일 생성 |
+
+AI 키를 설정하면 `analyze`와 `extract`를 더해 감정·신뢰도·키워드·개선 제안까지 생성할 수 있습니다.
 
 ---
 
@@ -41,14 +72,24 @@ A2-2 는 **뉴스**, A2-3 은 **리뷰**입니다. 파이프라인 골격은 같
 ## 실행 방법
 
 ```bash
-git clone https://github.com/dicia-jhoh/codyssey-a2-3.git
-cd codyssey-a2-3
+git clone https://github.com/ppungee-maker/codyssey-a2-3-mission.git
+cd codyssey-a2-3-mission
 
 python3 --version                 # 3.10 이상
 pip install -r requirements.txt
 
 cp .env.example .env              # 값을 실제 키로 채웁니다 (AI 단계에만 필요)
 ```
+
+Windows PowerShell에서는 아래 명령을 사용합니다.
+
+```powershell
+python --version
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+`.env`는 Git에 포함하지 않습니다. API 키는 파일·커밋 메시지·스크린샷 어디에도 기록하지 마세요.
 
 ### 전체 흐름
 
