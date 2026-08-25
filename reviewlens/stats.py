@@ -133,7 +133,8 @@ def format_summary(data: dict) -> str:
     return "\n".join(lines)
 
 
-def build_report(db_path: str, charts: dict[str, str | None], alert: str | None = None) -> str:
+def build_report(db_path: str, charts: dict[str, str | None], alert: str | None = None,
+                 tracked: list[dict] | None = None) -> str:
     """리포트 Markdown 문자열을 만든다(순수 조립 — 파일을 쓰지 않는다)."""
     data = summary(db_path)
     with storage.connect(db_path) as conn:
@@ -192,7 +193,26 @@ def build_report(db_path: str, charts: dict[str, str | None], alert: str | None 
     else:
         lines += ["아직 추출을 실행하지 않았습니다 (`extract` 서브커맨드).", ""]
 
-    lines += ["## 6. 차트", ""]
+    lines += ["", "## 6. 개선 추적 (피드백 루프)", ""]
+    if tracked:
+        lines += [f"추적 지표: {tracked[0]['metric']} · 재측정 창 {tracked[0]['current_window']}", "",
+                  "| 키워드 | 우선순위 | 기준선 | 현재 | 변화 | 판정 | 다음 재측정 |",
+                  "|---|---|---|---|---|---|---|"]
+        for item in tracked:
+            base, now = item["baseline_ratio"], item["current"]["ratio"]
+            base_text = f"{base * 100:.1f}%" if base is not None else "-"
+            now_text = f"{now * 100:.1f}%" if now is not None else "-"
+            delta = (f"{(now - base) * 100:+.1f}%p"
+                     if (base is not None and now is not None) else "-")
+            lines.append(
+                f"| {item['keyword']} | {item['priority']:.1f} | {base_text} | {now_text} | "
+                f"{delta} | {item['verdict']} | {item['due']} |"
+            )
+        lines.append("")
+    else:
+        lines += ["추적 중인 액션이 없습니다 (`feedback --open` 으로 등록).", ""]
+
+    lines += ["## 7. 차트", ""]
     for label, path in charts.items():
         lines.append(f"- {label}: `{path}`" if path else f"- {label}: (생성되지 않음)")
     lines.append("")
