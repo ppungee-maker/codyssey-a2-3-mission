@@ -15,11 +15,11 @@
 
 | 역할 | 이름 | GitHub | 담당 영역 | 주요 산출물 |
 |---|---|---|---|---|
-| 팀⁠장 | 황⁠지⁠영 | [@ppungee-maker](https://github.com/ppungee-maker) | 저장소 운영·제출 관리 | 팀 저장소 호스팅과 협업자 권한 · 코디세이 미션 제출 등록 · AI 사전평가 실행과 결과 회수 · 미달 항목을 팀에 공유해 후속 PR 로 연결 · PR 검토와 `main` 병합 · 병합 완료 브랜치 정리 |
-| 팀⁠원 | 오⁠주⁠현 | [@dicia-jhoh](https://github.com/dicia-jhoh) | 파이프라인 설계·구현 총괄 | 저장소 스키마 `raw_reviews`/`clean_reviews`/`extractions` 3테이블 분리 · CSV 적재 · 정제 규칙 5종(필수 필드·별점 범위·날짜 형식·짧은 텍스트·중복) · 감정 + 신뢰도 분석 · 키워드/요약/개선 제안 추출 · 차트 3종(감정 분포·시간별 추이·별점별 감정 분포) · 통계 요약 · 보너스 4축(다국어 한·영 판정, 감정 급증 알림, 단일 HTML 대시보드, 제품별 비교) · GitHub Pages 공개 · 샘플 리뷰 70건(제품 3종·한 62/영 8·2026-07-01~08-20) · Gemini OpenAI 호환 endpoint 전환 |
-| 팀⁠원 | 김⁠승⁠현 | [@tqetri-ctrl](https://github.com/tqetri-ctrl) | 입출력 확장·API 안정성 | Excel(.xlsx) 적재와 내보내기(openpyxl · 헤더 스타일 · 한글 폭 반영 열너비 자동 조정) · `--format all` 로 CSV/JSONL/XLSX 일괄 산출 · 429·503 재시도와 백오프 · 분석 요청 사이 Rate Limit 딜레이(`ai.delay`) · 비용 최적화 모델 전환 · 운영 매뉴얼([`docs/manual.md`](docs/manual.md)) · 실행 계획서 |
-| 팀⁠원 | 육⁠민⁠호 | [@alsgh3920](https://github.com/alsgh3920) | 피드백 루프·원인 진단 | `feedback` — 후보 → 우선순위 → 등록(베이스라인 고정) → 재측정 → 종료 5단계 · 영향 50% + 심각도 30% + 추세 20% 로 매기는 0~100 우선순위 점수 · 조치 시점 지표를 고정해 「고치기 전 vs 후」를 가르는 actions 테이블 · `diagnose` — 별점·감정 불일치, 표본 급변, 제품 편중, 신규 키워드, 특정일 편중, 외부 운영 지표 6가설을 싼 순서로 검증해 지지/기각/판정 불가로 분류 · 리포트 「개선 추적」 섹션 |
-| 팀⁠원 | 오⁠혜⁠인 | [@OHyein7](https://github.com/OHyein7) | 온보딩 문서·검증 가이드 | API 키 없이 5개 명령으로 끝나는 3분 검증 가이드 · 「검증 항목 → 명령 → 기대 결과」 대조표 · Windows PowerShell 실행 절차 · Python/CLI/SQLite/AI 배지 · 클론 주소 정정 · `.env` 커밋 금지와 API 키 취급 주의 |
+| 팀⁠장 | 황⁠지⁠영 | [@ppungee-maker](https://github.com/ppungee-maker) | 저장소 운영·제출 관리 | 저장소 호스팅·권한 · 미션 제출 등록 · AI 사전평가 실행과 결과 회수 · PR 검토와 `main` 병합 |
+| 팀⁠원 | 오⁠주⁠현 | [@dicia-jhoh](https://github.com/dicia-jhoh) | 파이프라인 설계·구현 총괄 | raw/clean/extractions 3테이블 분리 · 정제 규칙 5종 · 감정+신뢰도 분석 · 키워드/요약/개선 제안 추출 · 차트 3종 · 통계 요약 · 보너스 4축(다국어·급증 알림·HTML 대시보드·제품 비교) · 샘플 70건 · Gemini 전환 |
+| 팀⁠원 | 김⁠승⁠현 | [@tqetri-ctrl](https://github.com/tqetri-ctrl) | 입출력 확장·API 안정성 | Excel(.xlsx) 적재·내보내기 · `--format all` 일괄 산출 · 429·503 재시도와 Rate Limit 딜레이 · 비용 최적화 모델 전환 · 운영 매뉴얼([`docs/manual.md`](docs/manual.md)) |
+| 팀⁠원 | 육⁠민⁠호 | [@alsgh3920](https://github.com/alsgh3920) | 피드백 루프·원인 진단 | `feedback` — 우선순위(영향·심각도·추세) → 베이스라인 고정 → 재측정 5단계 · `diagnose` — 6가설을 싼 순서로 검증해 지지/기각/판정 불가 분류 · 리포트 「개선 추적」 섹션 |
+| 팀⁠원 | 오⁠혜⁠인 | [@OHyein7](https://github.com/OHyein7) | 온보딩 문서·검증 가이드 | API 키 없이 도는 3분 검증 가이드와 기대 결과 대조표 · Windows PowerShell 절차 · 배지 · 클론 주소 정정 · API 키 취급 주의 |
 
 기능 추가는 각자 브랜치에서 PR 로 올리고 `main` 병합 전에 검토하는 방식으로 진행했습니다.
 
