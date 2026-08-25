@@ -1,16 +1,16 @@
-"""수집 — CSV 파일 적재(`import`)와 리뷰 1건 직접 입력(`add`).
+"""수집 — CSV/Excel 파일 적재(`import`)와 리뷰 1건 직접 입력(`add`).
 
 파일과 수동 입력을 **같은 raw 테이블**에 넣는 이유: 뒤 단계(정제·분석)가 출처를 신경 쓰지
 않아도 되게 하기 위해서다. 어디서 왔는지는 `method` 컬럼에 남으므로 나중에 구분할 수 있다.
 
-CSV 를 고른 이유: 엑셀에서 그대로 저장할 수 있고, 쇼핑몰 리뷰 내려받기가 대개 CSV 다.
-`csv.DictReader` 는 표준 라이브러리라 추가 설치가 없다.
+CSV/Excel 지원: 엑셀(.xlsx) 파일 및 CSV(.csv) 파일을 모두 읽을 수 있습니다.
 """
 
 from __future__ import annotations
 
 import csv
 import logging
+import os
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,83 @@ def read_csv(path: str) -> list[dict]:
         )
     logger.info("CSV 읽기: %s %d행", path, len(records))
     return records
+
+
+def read_excel(path: str) -> list[dict]:
+    """Excel(.xlsx) → raw 레코드 목록. openpyxl 라이브러리를 사용한다."""
+    if not os.path.exists(path):
+        raise ValueError(f"파일을 찾을 수 없습니다: {path}")
+
+    try:
+        import openpyxl
+    except ImportError as exc:
+        raise ValueError(
+            "Excel(.xlsx) 파일을 읽으려면 openpyxl 패키지가 필요합니다. "
+            "'pip install openpyxl'을 실행하세요."
+        ) from exc
+
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True)
+    except Exception as exc:
+        raise ValueError(f"Excel 파일을 열 수 없습니다({path}): {exc}") from exc
+
+    ws = wb.active
+    if ws is None:
+        raise ValueError(f"활성화된 워크시트가 없습니다: {path}")
+
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        raise ValueError(f"데이터 행이 없습니다: {path}")
+
+    headers = [str(h).strip() if h is not None else f"_col_{i}" for i, h in enumerate(header_row)]
+    if not any(headers):
+        raise ValueError(f"유효한 헤더(열 이름)가 없습니다: {path}")
+
+    records = []
+    for index, row_values in enumerate(rows_iter, start=1):
+        if not row_values or all(v is None or str(v).strip() == "" for v in row_values):
+            continue
+
+        row_dict = {}
+        for h, v in zip(headers, row_values):
+            if v is None:
+                row_dict[h] = ""
+            elif isinstance(v, datetime):
+                row_dict[h] = v.strftime("%Y-%m-%d")
+            else:
+                row_dict[h] = str(v)
+
+        records.append(
+            {
+                "ingested_at": now_iso(),
+                "source": path,
+                "method": "excel",
+                "payload": {**row_dict, "_row_number": index},
+            }
+        )
+
+    if not records:
+        raise ValueError(f"데이터 행이 없습니다: {path}")
+
+    logger.info("Excel 읽기: %s %d행", path, len(records))
+    return records
+
+
+def read_file(path: str) -> list[dict]:
+    """확장자에 따라 CSV 또는 Excel 파일을 적절히 읽어 raw 레코드 목록으로 돌려준다."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".xlsx", ".xlsm", ".xltx", ".xltm"):
+        return read_excel(path)
+    elif ext in (".csv", ".tsv", ".txt"):
+        return read_csv(path)
+    else:
+        # 확장자가 없거나 낯선 경우 먼저 CSV로 시도 후 Excel 시도
+        try:
+            return read_csv(path)
+        except Exception:
+            return read_excel(path)
 
 
 def make_manual_record(text: str, *, review_id: str | None, product: str | None,

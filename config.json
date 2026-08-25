@@ -2,12 +2,19 @@
   "duplicate_policy": "skip",
   "clean": {
     "min_text_length": 10,
-    "rating_range": [1, 5]
+    "rating_range": [
+      1,
+      5
+    ]
   },
   "ai": {
-    "model": "gemini-flash-latest",
+    "model": "gemini-3.5-flash-lite",
     "timeout": 60,
-    "languages": ["ko", "en"]
+    "languages": [
+      "ko",
+      "en"
+    ],
+    "delay": 4.2
   },
   "alert": {
     "window_days": 3,

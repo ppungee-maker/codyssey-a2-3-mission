@@ -64,8 +64,68 @@ def export_jsonl(rows, out_dir: str) -> str:
     return path
 
 
+def export_excel(rows, out_dir: str) -> str:
+    """Excel(.xlsx) 로 내보낸다 → 경로.
+
+    openpyxl 을 사용하여 헤더 스타일 및 열 너비를 자동 조정한다.
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise ValueError(
+            "Excel(.xlsx) 로 내보내려면 openpyxl 패키지가 필요합니다. "
+            "'pip install openpyxl'을 실행하세요."
+        ) from exc
+
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"reviews_{now_iso()[:10]}.xlsx")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "reviews"
+
+    # 헤더 작성 및 스타일링
+    ws.append(FIELDS)
+    header_fill = PatternFill(start_color="3D5A80", end_color="3D5A80", fill_type="solid")
+    header_font = Font(name="맑은 고딕", size=11, bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    for col_idx in range(1, len(FIELDS) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+    # 데이터 작성
+    body_font = Font(name="맑은 고딕", size=10)
+    for row in rows:
+        item = _row_to_dict(row)
+        ws.append([item[f] if item[f] is not None else "" for f in FIELDS])
+
+    # 폰트 적용 및 열 너비 자동 조정
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=len(FIELDS)):
+        for cell in row:
+            cell.font = body_font
+
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or "")
+            # 한글 등 유니코드 문자는 너비를 1.5배로 계산
+            char_len = sum(2 if ord(c) > 127 else 1 for c in val_str[:50])
+            max_len = max(max_len, char_len)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 60)
+
+    wb.save(path)
+    logger.info("Excel 저장: %s (%d건)", path, len(rows))
+    return path
+
+
 def run_export(db_path: str, out_dir: str, fmt: str = "csv", **filters) -> list[str]:
-    """내보내기 단계 → 저장된 경로 목록. fmt 는 csv · jsonl · both."""
+    """내보내기 단계 → 저장된 경로 목록. fmt 는 csv · jsonl · excel · both · all."""
     with storage.connect(db_path) as conn:
         rows = storage.select_clean(conn, **filters)
 
@@ -74,8 +134,12 @@ def run_export(db_path: str, out_dir: str, fmt: str = "csv", **filters) -> list[
         return []
 
     paths: list[str] = []
-    if fmt in ("csv", "both"):
+    fmt_lower = fmt.lower()
+
+    if fmt_lower in ("csv", "both", "all"):
         paths.append(export_csv(rows, out_dir))
-    if fmt in ("jsonl", "both"):
+    if fmt_lower in ("jsonl", "both", "all"):
         paths.append(export_jsonl(rows, out_dir))
+    if fmt_lower in ("excel", "xlsx", "all"):
+        paths.append(export_excel(rows, out_dir))
     return paths
