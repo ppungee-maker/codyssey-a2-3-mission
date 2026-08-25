@@ -14,6 +14,20 @@
     "negative_ratio_threshold": 0.5,
     "min_reviews": 5
   },
+  "feedback": {
+    "cadence_days": 30,
+    "max_actions": 5,
+    "min_mentions": 2,
+    "improve_delta": -0.1,
+    "worsen_delta": 0.1
+  },
+  "diagnose": {
+    "mismatch_threshold": 0.2,
+    "volume_change_threshold": 0.5,
+    "product_share_threshold": 0.6,
+    "new_keyword_min_count": 2,
+    "burst_share_threshold": 0.6
+  },
   "storage": {
     "db_path": "data/reviews.db"
   },

@@ -54,6 +54,26 @@ CREATE TABLE IF NOT EXISTS extractions (
     result      TEXT NOT NULL    -- 추출 결과(JSON)
 );
 
+-- 개선 피드백 루프. 부정 키워드 하나 = 액션 하나.
+--
+-- **왜 별도 테이블인가**: extractions 는 "AI 가 그때 뭐라고 했나"의 기록이고, actions 는
+-- "우리가 무엇을 고치기로 했고 그 뒤 어떻게 됐나"의 기록이다. 조치 시행 시점(opened_at)과
+-- 그 직전 지표(baseline_*)를 남겨 두지 않으면 나중에 **개선 전/후를 가를 기준선이 없다**.
+CREATE TABLE IF NOT EXISTS actions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    opened_at         TEXT NOT NULL,          -- 액션 등록 = 조치 착수 시각
+    keyword           TEXT NOT NULL UNIQUE,   -- 추적 대상 부정 키워드(멱등키)
+    priority          REAL NOT NULL,          -- 우선순위 점수 0~100 (feedback.priority_score)
+    metric            TEXT NOT NULL,          -- 추적 지표 이름(무엇으로 성패를 재는가)
+    baseline_ratio    REAL,                   -- 조치 직전 창의 부정 비율
+    baseline_mentions INTEGER,                -- 조치 직전 창의 언급 건수
+    baseline_from     TEXT,
+    baseline_to       TEXT,
+    cadence_days      INTEGER NOT NULL,       -- 재측정 주기(일)
+    status            TEXT NOT NULL,          -- open | closed
+    closed_at         TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_clean_created ON clean_reviews(created_at);
 CREATE INDEX IF NOT EXISTS idx_clean_product ON clean_reviews(product);
 CREATE INDEX IF NOT EXISTS idx_clean_sentiment ON clean_reviews(sentiment);
@@ -355,3 +375,147 @@ def group_by_language(conn: sqlite3.Connection) -> list[tuple[str, int]]:
            FROM clean_reviews GROUP BY lang ORDER BY n DESC"""
     )
     return [(r["lang"], r["n"]) for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 개선 피드백 루프 (actions) — feedback.py 가 쓴다
+# ─────────────────────────────────────────────────────────────────────────────
+
+def open_action(conn: sqlite3.Connection, item: dict) -> str:
+    """액션 1건 등록 → 'opened' | 'exists'.
+
+    이미 추적 중인 키워드는 **덮어쓰지 않는다**. 베이스라인을 새로 잡으면 그때까지의
+    개선 이력이 지워져 "고쳤는데 나아졌나"를 영영 답할 수 없다.
+    """
+    row = conn.execute(
+        "SELECT id FROM actions WHERE keyword = ?", (item["keyword"],)
+    ).fetchone()
+    if row:
+        return "exists"
+    conn.execute(
+        """INSERT INTO actions
+           (opened_at, keyword, priority, metric, baseline_ratio, baseline_mentions,
+            baseline_from, baseline_to, cadence_days, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
+        (
+            item["opened_at"], item["keyword"], item["priority"], item["metric"],
+            item.get("baseline_ratio"), item.get("baseline_mentions"),
+            item.get("baseline_from"), item.get("baseline_to"), item["cadence_days"],
+        ),
+    )
+    return "opened"
+
+
+def list_actions(conn: sqlite3.Connection, status: str | None = "open") -> list[sqlite3.Row]:
+    """추적 중인 액션 목록. status=None 이면 닫힌 것까지 전부."""
+    sql = "SELECT * FROM actions"
+    params: list = []
+    if status:
+        sql += " WHERE status = ?"
+        params.append(status)
+    sql += " ORDER BY priority DESC, id"
+    return list(conn.execute(sql, params))
+
+
+def close_action(conn: sqlite3.Connection, keyword: str, at: str) -> bool:
+    """액션을 닫는다 → 닫혔으면 True. 없거나 이미 닫혔으면 False."""
+    cursor = conn.execute(
+        "UPDATE actions SET status = 'closed', closed_at = ? WHERE keyword = ? AND status = 'open'",
+        (at, keyword),
+    )
+    return cursor.rowcount > 0
+
+
+def keyword_window(conn: sqlite3.Connection, keyword: str, start: str, end: str) -> dict:
+    """구간 안에서 특정 키워드가 들어간 리뷰의 (언급 수, 부정 수, 부정률, 평균 별점).
+
+    본문 부분 일치(LIKE)로 세는 이유: 형태소 분석기를 붙이면 의존성이 늘고, 리뷰의
+    불만 키워드는 대개 "배송"·"불량"처럼 **원형 그대로** 나타난다. 대신 LIKE 패턴의
+    와일드카드(%, _)를 이스케이프해 키워드에 특수문자가 들어가도 깨지지 않게 한다.
+    """
+    pattern = "%" + keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    row = conn.execute(
+        """SELECT COUNT(*) AS mentions,
+                  SUM(CASE WHEN sentiment = '부정' THEN 1 ELSE 0 END) AS negative,
+                  AVG(rating) AS avg_rating
+           FROM clean_reviews
+           WHERE text LIKE ? ESCAPE '\\'
+             AND sentiment IS NOT NULL
+             AND created_at IS NOT NULL AND created_at >= ? AND created_at <= ?""",
+        (pattern, start, end),
+    ).fetchone()
+    mentions = int(row["mentions"] or 0)
+    negative = int(row["negative"] or 0)
+    return {
+        "mentions": mentions,
+        "negative": negative,
+        "ratio": (negative / mentions) if mentions else None,
+        "avg_rating": round(row["avg_rating"], 2) if row["avg_rating"] is not None else None,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 원인 가설 검증 (diagnose.py 가 쓴다)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def negative_by_product(conn: sqlite3.Connection, start: str, end: str) -> list[sqlite3.Row]:
+    """구간의 제품별 (전체, 부정) — 가설 H1(제품 편중) 검증용."""
+    return list(conn.execute(
+        """SELECT COALESCE(product, '(미상)') AS product,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN sentiment = '부정' THEN 1 ELSE 0 END) AS negative
+           FROM clean_reviews
+           WHERE sentiment IS NOT NULL
+             AND created_at IS NOT NULL AND created_at >= ? AND created_at <= ?
+           GROUP BY product ORDER BY negative DESC, total DESC""",
+        (start, end),
+    ))
+
+
+def mismatch_window(conn: sqlite3.Connection, start: str, end: str) -> dict:
+    """구간의 별점-감정 불일치 — 가설 H3(오탐) 검증용.
+
+    별점 4~5인데 본문이 부정, 별점 1~2인데 본문이 긍정인 건을 센다. 이 비율이 높으면
+    "정말 나빠졌다"보다 **"분석이 틀렸다"** 를 먼저 의심해야 한다.
+    """
+    row = conn.execute(
+        """SELECT COUNT(*) AS scored,
+                  SUM(CASE WHEN rating >= 4 AND sentiment = '부정' THEN 1 ELSE 0 END) AS high_neg,
+                  SUM(CASE WHEN rating <= 2 AND sentiment = '긍정' THEN 1 ELSE 0 END) AS low_pos,
+                  AVG(confidence) AS avg_confidence
+           FROM clean_reviews
+           WHERE sentiment IS NOT NULL AND rating IS NOT NULL
+             AND created_at IS NOT NULL AND created_at >= ? AND created_at <= ?""",
+        (start, end),
+    ).fetchone()
+    scored = int(row["scored"] or 0)
+    mismatch = int(row["high_neg"] or 0) + int(row["low_pos"] or 0)
+    return {
+        "scored": scored,
+        "mismatch": mismatch,
+        "ratio": (mismatch / scored) if scored else None,
+        "avg_confidence": round(row["avg_confidence"], 3) if row["avg_confidence"] is not None else None,
+    }
+
+
+def negative_texts(conn: sqlite3.Connection, start: str, end: str) -> list[str]:
+    """구간의 부정 리뷰 본문 — 가설 H2(신규 키워드 급증) 검증용."""
+    rows = conn.execute(
+        """SELECT text FROM clean_reviews
+           WHERE sentiment = '부정'
+             AND created_at IS NOT NULL AND created_at >= ? AND created_at <= ?""",
+        (start, end),
+    )
+    return [r["text"] for r in rows]
+
+
+def negative_dates(conn: sqlite3.Connection, start: str, end: str) -> list[tuple[str, int]]:
+    """구간의 (날짜, 부정 건수) — 가설 H5(특정일·요일 편중) 검증용."""
+    rows = conn.execute(
+        """SELECT created_at AS d, COUNT(*) AS n FROM clean_reviews
+           WHERE sentiment = '부정'
+             AND created_at IS NOT NULL AND created_at >= ? AND created_at <= ?
+           GROUP BY d ORDER BY d""",
+        (start, end),
+    )
+    return [(r["d"], r["n"]) for r in rows]

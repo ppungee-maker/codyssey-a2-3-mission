@@ -1,4 +1,4 @@
-"""CLI — argparse 서브커맨드 10개.
+"""CLI — argparse 서브커맨드 12개.
 
   import     CSV 적재            → raw_reviews
   add        리뷰 1건 직접 입력  → raw_reviews
@@ -10,6 +10,8 @@
   stats      통계 요약
   dashboard  차트 + 리포트 + HTML 대시보드
   export     CSV / JSONL
+  feedback   개선 피드백 루프(부정 키워드 추적·효과 측정)
+  diagnose   부정률 급증의 원인 가설 검증
 
 **단계를 나눈 이유**: 각 단계의 비용과 실패 성격이 다르다. 적재는 파일 I/O, 정제는 계산,
 분석은 돈이 든다. 한 명령으로 묶으면 분석이 실패했을 때 적재부터 다시 해야 한다.
@@ -26,7 +28,8 @@ import logging
 import sys
 from typing import Sequence
 
-from . import ai, alert, charts, clean, config as config_module, dashboard, export, ingest
+from . import ai, alert, charts, clean, config as config_module, dashboard, diagnose, export
+from . import feedback, ingest
 from . import stats as stats_module
 from . import storage
 
@@ -52,7 +55,7 @@ def setup_logging(verbose: bool = False) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """서브커맨드 10개를 정의한다."""
+    """서브커맨드 12개를 정의한다."""
     parser = argparse.ArgumentParser(
         prog="reviewlens",
         description="고객 리뷰 감정 분석 — 적재·정제·분석·추출·조회·대시보드",
@@ -131,6 +134,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--rating-min", dest="rating_min", type=int)
     p_exp.add_argument("--product")
     p_exp.set_defaults(func=_cmd_export)
+
+    # 개선 피드백 루프 — 등록(--open) / 재측정(기본) / 종료(--close)
+    p_fb = sub.add_parser("feedback", help="개선 피드백 루프 — 부정 키워드 추적·효과 측정")
+    fb_group = p_fb.add_mutually_exclusive_group()
+    fb_group.add_argument("--open", action="store_true",
+                          help="부정 키워드를 우선순위로 정렬해 액션 등록(베이스라인 고정)")
+    fb_group.add_argument("--close", dest="close_keyword", metavar="KEYWORD",
+                          help="개선이 확인된 액션을 닫는다")
+    p_fb.add_argument("--as-of", dest="as_of", help="측정 기준일 YYYY-MM-DD(기본: 최신 리뷰일)")
+    p_fb.set_defaults(func=_cmd_feedback)
+
+    p_diag = sub.add_parser("diagnose", help="부정률 급증의 원인 가설 검증")
+    p_diag.add_argument("--as-of", dest="as_of", help="기준일 YYYY-MM-DD(기본: 최신 리뷰일)")
+    p_diag.set_defaults(func=_cmd_diagnose)
 
     return parser
 
@@ -279,7 +296,16 @@ def _cmd_stats(args, cfg: dict) -> int:
                                     reference=getattr(args, "as_of", None))
     print("  [감정 변화 알림]")
     print(alert.format_evidence(evidence))
-    print(f"  {'⚠ ' + warning if warning else '이상 없음'}\n")
+    print(f"  {'⚠ ' + warning if warning else '이상 없음'}")
+    if warning:
+        # 경고가 떴을 때만 다음 단계를 안내한다 — 평상시에 매번 뜨면 아무도 안 읽는다.
+        print("  → 원인 가설 검증: `python -m reviewlens diagnose`")
+
+    tracked = feedback.review(cfg["storage"]["db_path"], cfg, reference=getattr(args, "as_of", None))
+    if tracked:
+        print("\n  [개선 추적]")
+        print(feedback.format_review(tracked))
+    print()
     return 0
 
 
@@ -301,7 +327,8 @@ def _cmd_dashboard(args, cfg: dict) -> int:
 
     warning, _ = alert.check(db_path, cfg, reference=getattr(args, "as_of", None))
 
-    text = stats_module.build_report(db_path, made, alert=warning)
+    tracked = feedback.review(db_path, cfg, reference=getattr(args, "as_of", None))
+    text = stats_module.build_report(db_path, made, alert=warning, tracked=tracked)
     report_path = stats_module.save_report(
         text, config_module.ensure_dir(cfg["output"]["reports_dir"]), fmt=args.format
     )
@@ -329,6 +356,55 @@ def _cmd_export(args, cfg: dict) -> int:
         return 1
     for path in paths:
         print(path)
+    return 0
+
+
+def _cmd_feedback(args, cfg: dict) -> int:
+    """개선 루프. 기본 동작은 **재측정**이다 — 매일 보게 되는 것이 현황이기 때문이다."""
+    db_path = cfg["storage"]["db_path"]
+
+    if args.close_keyword:
+        with storage.connect(db_path) as conn:
+            closed = storage.close_action(conn, args.close_keyword, ingest.now_iso())
+        if not closed:
+            print(f"열려 있는 액션이 없습니다: {args.close_keyword}", file=sys.stderr)
+            return 1
+        print(f"액션 종료: {args.close_keyword}")
+        return 0
+
+    if args.open:
+        opened = feedback.open_actions(db_path, cfg, reference=args.as_of)
+        if not opened:
+            print("등록할 후보가 없습니다 (`extract` 를 먼저 실행하거나 리뷰를 더 모으세요)")
+            return 0
+        print(f"액션 후보 {len(opened)}건")
+        for item in opened:
+            state = "등록" if item["state"] == "opened" else "이미 추적 중"
+            ratio = item["baseline"]["ratio"]
+            base = f"{ratio * 100:.1f}%" if ratio is not None else "-"
+            print(f"  [{state}] {item['keyword']} · 우선순위 {item['priority']:.1f} · "
+                  f"기준선 {base} ({item['from']}~{item['to']})")
+        return 0
+
+    results = feedback.review(db_path, cfg, reference=args.as_of)
+    print("=" * 62)
+    print(" 개선 피드백 루프 — 추적 현황")
+    print("=" * 62)
+    print(feedback.format_review(results))
+    print()
+    return 0
+
+
+def _cmd_diagnose(args, cfg: dict) -> int:
+    """경고 다음 단계 — 왜 올랐는지 가설을 갈라 본다."""
+    result = diagnose.run(cfg["storage"]["db_path"], cfg, reference=args.as_of)
+    print("=" * 62)
+    print(" 부정률 급증 — 원인 가설 검증")
+    print("=" * 62)
+    print(f"  {'⚠ ' + result['alert'] if result['alert'] else '경고 없음 (평상시 수치를 함께 봅니다)'}")
+    print()
+    print(diagnose.format_result(result))
+    print()
     return 0
 
 
