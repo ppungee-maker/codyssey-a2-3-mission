@@ -11,10 +11,23 @@
 리뷰 CSV 를 넣으면 **적재 → 정제 → 감정 분석 → 인사이트 추출 → 차트·리포트·HTML 대시보드**
 까지 만들어 주는 CLI 도구입니다. 데이터는 SQLite 에 남고, 단계마다 따로 실행할 수 있습니다.
 
+## 팀 구성과 역할
+
+| 역할 | 이름 | GitHub | 담당 영역 | 주요 산출물 |
+|---|---|---|---|---|
+| 팀장 | 황지영 | [@dicia-jhoh](https://github.com/dicia-jhoh) | 파이프라인 설계·구현 총괄 | 저장소 스키마(raw/clean 분리)·정제 규칙 5종·감정 분석·차트 3종·통계, 보너스 4축(급증 알림·HTML 대시보드), GitHub Pages 공개, 샘플 리뷰 70건 |
+| 팀원 | 오주현 | [@ppungee-maker](https://github.com/ppungee-maker) | 저장소 운영·제출 관리 | 팀 저장소 호스팅·권한 관리, 코디세이 제출 등록, AI 사전평가 실행과 결과 회수, PR 병합 확인 |
+| 팀원 | 김승현 | [@tqetri-ctrl](https://github.com/tqetri-ctrl) | 입출력 확장·API 안정성 | Excel(.xlsx) 적재/내보내기, 429·503 재시도와 Rate Limit 딜레이, 비용 최적화 모델 전환, 운영 매뉴얼([`docs/manual.md`](docs/manual.md)) |
+| 팀원 | 육민호 | [@alsgh3920](https://github.com/alsgh3920) | 피드백 루프·원인 진단 | `feedback` — 부정 키워드 우선순위·조치·효과 측정, `diagnose` — 부정률 급증 원인 가설 검증, 리포트 개선 추적 섹션 |
+| 팀원 | 오혜인 | [@OHyein7](https://github.com/OHyein7) | 온보딩 문서·검증 가이드 | 3분 검증 가이드, Windows PowerShell 실행 절차, 배지·클론 주소 정정, API 키 취급 주의 |
+
+역할은 실제 커밋·PR 기록을 기준으로 정리했습니다. 기능 추가는 각자 브랜치에서 PR 로 올리고
+`main` 병합 전에 검토하는 방식으로 진행했습니다.
+
 | 항목 | 값 |
 |---|---|
 | 실행 | `python -m reviewlens <서브커맨드>` |
-| 서브커맨드 | `import` `add` `clean` `analyze` `extract` `list` `show` `stats` `dashboard` `export` |
+| 서브커맨드 | `import` `add` `clean` `analyze` `extract` `list` `show` `stats` `dashboard` `export` `feedback` `diagnose` |
 | 저장소 | SQLite — `raw_reviews` · `clean_reviews` · `extractions` |
 | 차트 | 감정 분포 · 시간별 추이 · 별점별 감정 분포 (matplotlib) |
 | 외부 의존 | `requests` · `matplotlib` · `openpyxl` |
