@@ -11,18 +11,6 @@
 리뷰 CSV 를 넣으면 **적재 → 정제 → 감정 분석 → 인사이트 추출 → 차트·리포트·HTML 대시보드**
 까지 만들어 주는 CLI 도구입니다. 데이터는 SQLite 에 남고, 단계마다 따로 실행할 수 있습니다.
 
-## 팀 구성과 역할
-
-| 역할 | 이름 | GitHub | 담당 영역 | 주요 산출물 |
-|---|---|---|---|---|
-| 팀⁠장 | 황⁠지⁠영 | [@ppungee-maker](https://github.com/ppungee-maker) | 저장소 운영·제출 관리 | 저장소 호스팅·권한 · 미션 제출 등록 · AI 사전평가 실행과 결과 회수 · PR 검토와 `main` 병합 |
-| 팀⁠원 | 오⁠주⁠현 | [@dicia-jhoh](https://github.com/dicia-jhoh) | 파이프라인 설계·구현 총괄 | raw/clean/extractions 3테이블 분리 · 정제 규칙 5종 · 감정+신뢰도 분석 · 키워드/요약/개선 제안 추출 · 차트 3종 · 통계 요약 · 보너스 4축(다국어·급증 알림·HTML 대시보드·제품 비교) · 샘플 70건 · Gemini 전환 |
-| 팀⁠원 | 김⁠승⁠현 | [@tqetri-ctrl](https://github.com/tqetri-ctrl) | 입출력 확장·API 안정성 | Excel(.xlsx) 적재·내보내기 · `--format all` 일괄 산출 · 429·503 재시도와 Rate Limit 딜레이 · 비용 최적화 모델 전환 · 운영 매뉴얼([`docs/manual.md`](docs/manual.md)) |
-| 팀⁠원 | 육⁠민⁠호 | [@alsgh3920](https://github.com/alsgh3920) | 피드백 루프·원인 진단 | `feedback` — 우선순위(영향·심각도·추세) → 베이스라인 고정 → 재측정 5단계 · `diagnose` — 6가설을 싼 순서로 검증해 지지/기각/판정 불가 분류 · 리포트 「개선 추적」 섹션 |
-| 팀⁠원 | 오⁠혜⁠인 | [@OHyein7](https://github.com/OHyein7) | 온보딩 문서·검증 가이드 | API 키 없이 도는 3분 검증 가이드와 기대 결과 대조표 · Windows PowerShell 절차 · 배지 · 클론 주소 정정 · API 키 취급 주의 |
-
-기능 추가는 각자 브랜치에서 PR 로 올리고 `main` 병합 전에 검토하는 방식으로 진행했습니다.
-
 | 항목 | 값 |
 |---|---|
 | 실행 | `python -m reviewlens <서브커맨드>` |
